@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const lib = b.addStaticLibrary(.{
-        .name = "glfw",
+        .name = "glfw3",
         .target = target,
         .optimize = optimize,
     });
