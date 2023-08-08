@@ -18,11 +18,11 @@ pub fn build(b: *std.Build) void {
         switch (t.os.tag) {
             .freebsd, .netbsd, .openbsd, .dragonfly, .linux => {
                 flags.setPresent(
-                    .incl_x11,
+                    .x11,
                     b.option(bool, "x11", "include support for the x11 windowing system") orelse true,
                 );
                 flags.setPresent(
-                    .incl_wayland,
+                    .wayland,
                     b.option(bool, "wayland", "include support for the wayland windowing system") orelse false,
                 );
             },
@@ -32,7 +32,9 @@ pub fn build(b: *std.Build) void {
         var flag_list = std.ArrayList([]const u8).init(b.allocator);
         var it = flags.iterator();
         while (it.next()) |flag| {
-            flag_list.append(FlagKeywords.get(flag)) catch unreachable;
+            if (FlagKeywords.get(flag)) |keywords| {
+                flag_list.appendSlice(keywords) catch unreachable;
+            }
         }
 
         break :flag_blk flag_list.toOwnedSlice() catch unreachable;
@@ -45,10 +47,13 @@ pub fn build(b: *std.Build) void {
 
     switch (t.os.tag) {
         .freebsd, .netbsd, .openbsd, .dragonfly, .linux => {
-            if (flags.contains(.incl_x11)) {
+            if (flags.contains(.x11)) {
                 lib.addCSourceFiles(&x11_sources, flag_strings);
             }
-            lib.addCSourceFiles(&linux_extra_sources, flag_strings);
+            if (t.os.tag == .linux) {
+                lib.addCSourceFiles(&linux_sources, flag_strings);
+            }
+            lib.addCSourceFiles(&unix_sources, flag_strings);
             lib.addCSourceFiles(&posix_sources, flag_strings);
         },
         else => unreachable,
@@ -62,8 +67,6 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 }
-
-const UnixWindowing = enum { x11, wayland };
 
 const base_sources = .{
     "src/context.c",
@@ -82,22 +85,33 @@ const base_sources = .{
 };
 
 const posix_sources = .{ "src/posix_module.c", "src/posix_thread.c", "src/posix_time.c" };
-
-const x11_sources = .{
-    "src/x11_init.c",
-    "src/x11_monitor.c",
-    "src/x11_window.c",
-    "src/xkb_unicode.c",
-    "src/glx_context.c",
+const windows_sources = .{
+    "src/win32_init.c",
+    "src/win32_joystick.c",
+    "src/win32_monitor.c",
+    "src/win32_window.c",
+    "src/wgl_context.c",
 };
-const linux_extra_sources = .{ "src/linux_joystick.c", "src/posix_poll.c" };
+const cocoa_sources = .{
+    "src/cocoa_init.m",
+    "src/cocoa_joystick.m",
+    "src/cocoa_monitor.m",
+    "src/cocoa_window.m",
+    "src/nsgl_context.m",
+};
+const unix_sources = .{"src/posix_poll.c"};
+const linux_sources = .{"src/linux_joystick.c"};
+const x11_sources = .{ "src/x11_init.c", "src/x11_monitor.c", "src/x11_window.c", "src/xkb_unicode.c", "src/glx_context.c" };
 
 const BuildFlags = enum {
-    incl_x11,
-    incl_wayland,
+    win32,
+    cocoa,
+    x11,
+    wayland,
 };
 
-const FlagKeywords = std.EnumArray(BuildFlags, []const u8).init(.{
-    .incl_x11 = "-D_GLFW_X11",
-    .incl_wayland = "-D_GLFW_WAYLAND",
+const FlagKeywords = std.EnumMap(BuildFlags, []const []const u8).init(.{
+    .x11 = &.{"-D_GLFW_X11"},
+    .wayland = &.{"-D_GLFW_WAYLAND"},
+    .win32 = &.{ "-D_UNICODE", "-DUNICODE" },
 });
